@@ -1,0 +1,175 @@
+---
+title: "Supplementary Information: *Rtpca: an R package for differential thermal coaggregation analysis*"
+author:
+- name: Nils Kurzawa
+  affiliation: 
+  - European Molecular Biology Laboratory (EMBL), Genome Biology Unit
+- name: André Mateus 
+  affiliation: 
+  - European Molecular Biology Laboratory (EMBL), Genome Biology Unit
+- name: Mikhail M. Savitski
+  affiliation: 
+  - European Molecular Biology Laboratory (EMBL), Genome Biology Unit
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+package: Rtpca
+output:
+  BiocStyle::pdf_document:
+    keep_md: yes
+vignette: >
+    %\VignetteIndexEntry{Vignette Title}
+    %\VignetteEngine{knitr::rmarkdown}
+    %\VignetteEncoding{UTF-8} 
+bibliography: bibliography.bib
+csl: cell.csl
+header-includes: 
+- \usepackage{placeins}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+Thermal proteome profiling (TPP) [@Savitski2014; @Mateus2020] is a mass spectrometry-based, proteom-wide implemention of the cellular thermal shift assay [@Molina2013]. It was originally developed to study drug-(off-)target engagement. However, it was realized that profiles of interacting protein pairs appeared more similar than by change [@Tan2018, @Becher2018] which was coined as 'thermal proximity co-aggregation' (TPCA) [@Tan2018]. The R package `Rtpca` enables analysis of TPP datasets in the light of protein-protein interactions or protein complex associations. Here, we exemplify the analysis based on a dataset by Hashimoto et al. [@Hashimoto2020] studying the dynamics of protein-protein interactions in human cells during Cytomegalovirus infection.
+
+# Step-by-step walk through the data analysis
+
+First, we need to load the required libraries (these need to be installed as specified in the comments):
+
+```{r, message=FALSE, warning=FALSE}
+library(dplyr) # install.packages("dplyr")
+library(readxl) # install.packages("readxl")
+library(Rtpca) # require(devtools); devtools::install_github("nkurzaw/Rtpca")
+library(ggplot2) # install.packages("ggplot2")
+```
+
+
+Then, we download the supplementary data from Hashimoto et al. which contains the TPP data:
+
+```{r}
+if(!file.exists("41467_2020_14586_MOESM4_ESM.xlsx")){
+    download.file(
+    url = "https://static-content.springer.com/esm/art%3A10.1038%2Fs41467-020-14586-5/MediaObjects/41467_2020_14586_MOESM4_ESM.xlsx", 
+    destfile = "41467_2020_14586_MOESM4_ESM.xlsx")
+}
+
+```
+We then read in the excel table:
+```{r}
+suppl1_df <- read_xlsx("41467_2020_14586_MOESM4_ESM.xlsx", sheet = "TableS1B") 
+```
+
+From the table we create a matrix of the median relative fold changes for the Mock dataset:
+```{r}
+mock_df <- suppl1_df %>% 
+    dplyr::select(Uniprot_ID, Gene_symbol, dplyr::matches("Mock")) %>% 
+    na.omit()
+mock_mat <- as.matrix(mock_df[,-c(1,2)])
+rownames(mock_mat) <- mock_df$Gene_symbol
+id_dup <- which(duplicated(rownames(mock_mat)))
+mock_mat <- mock_mat[-id_dup,]
+```
+
+The same is done for the 24h post infection data:
+```{r}
+inf24h_df <- suppl1_df %>% 
+    dplyr::select(Uniprot_ID, Gene_symbol, dplyr::matches("24")) %>% 
+    na.omit()
+inf24h_mat <- as.matrix(inf24h_df[,-c(1,2)])
+rownames(inf24h_mat) <- inf24h_df$Gene_symbol
+id_dup_24h <- which(duplicated(rownames(inf24h_mat)))
+inf24h_mat <- inf24h_mat[-id_dup_24h,]
+```
+
+
+We now load our annotation of protein pairs within the same protein complexes (this dataset comes with the `Rtpca` package, please make sure to cite it whenever you use it @Ori2016):
+```{r}
+data("ori_et_al_complex_ppis")
+```
+
+
+We extend this annotation by one of the significantly changing protein-protein interactions that Hashimoto et al. reported that is not present in our annotation:
+```{r}
+ori_et_al_complex_ppis_extended <- 
+    bind_rows(ori_et_al_complex_ppis,
+           tibble(
+               complex_name = "PI3K Pathway",
+               x = "CRK",
+               y = "PIK3R1",
+               pair = "CRK:PIK3R1"))
+```
+
+## Running Rtpca for a single condition
+
+To run Rtpca for the mock dataset:
+```{r cache=TRUE}
+mockTPCA <- runTPCA(
+    objList = list(mock_mat),
+    ppiAnno = ori_et_al_complex_ppis
+)
+```
+We can then look at the ROC curve with:
+```{r cache=TRUE, fig.cap="ROC curve for identification of protein pairs part of the same complex in the Mock dataset."}
+plotPPiRoc(mockTPCA, computeAUC = TRUE)
+```
+\FloatBarrier
+and the result table of significantly co-melting protein pairs:
+```{r cache=TRUE}
+head(mockTPCA@tpcaResultTable %>% filter(p_adj < 0.01) %>% arrange(p_adj))
+```
+The same can be done for the 24h post infection dataset:
+```{r cache=TRUE}
+inf24hTPCA <- runTPCA(
+    objList = list(inf24h_mat),
+    ppiAnno = ori_et_al_complex_ppis
+)
+```
+
+```{r cache=TRUE, fig.cap="ROC curve for identification of protein pairs part of the same complex in the 24h post infection dataset."}
+plotPPiRoc(inf24hTPCA, computeAUC = TRUE)
+```
+\FloatBarrier
+```{r}
+head(inf24hTPCA@tpcaResultTable %>% filter(p_adj < 0.01) %>% arrange(p_adj))
+```
+
+## Running a differential Rtpca analysis
+
+To run the differential TPCA test between the mock and the 24h post infection datasets we run:
+```{r cache=TRUE}
+mockInf24hDiffTPCA <- runDiffTPCA(
+    objList = list(mock_mat),
+    contrastList = list(inf24h_mat),
+    ppiAnno = ori_et_al_complex_ppis_extended
+)
+```
+
+And we can inspect the result with a volcano plot:
+```{r fig.cap="Volcanoplot of differential TPCA results. Colored in black are the significantly differentially coaggregating protein pairs betwee both datasets."}
+plotDiffTpcaVolcano(mockInf24hDiffTPCA)
+```
+\FloatBarrier
+The interaction between CRK and PIK3R1 is one of the significantly changing interations, which we can see by labeling it in the volcano plot:
+```{r fig.cap="Volcanoplot of differential TPCA results. Colored in red is the protein pair CRK-PIK3R1 which is significantly coaggregating more strongly in the 24h post infection data."}
+plotDiffTpcaVolcano(mockInf24hDiffTPCA) +
+    geom_point(color = "red",
+               data = filter(mockInf24hDiffTPCA@diffTpcaResultTable, 
+                             pair == "CRK:PIK3R1"))
+```
+\FloatBarrier
+As we can see from figure \@ref(fig:riboVolcanoPlot) many of the protein-protein interactions that appear to losen up in the post infection dataset compared to Mock are between members of ribosome. This could reflect translational stalling in response to viral infection.
+
+```{r riboVolcanoPlot, cache=TRUE, fig.cap="Volcanoplot of differential TPCA results. Colored in blue are significantly changing protein pairs including at least one ribosomal protein."}
+plotDiffTpcaVolcano(mockInf24hDiffTPCA) + 
+    geom_point(color = "steelblue",
+               data = filter(mockInf24hDiffTPCA@diffTpcaResultTable, 
+                             p_adj < 0.1,
+                             grepl("^RP[L,S]", pair)))
+```
+
+
+```{r}
+sessionInfo()
+```
+
+# References
