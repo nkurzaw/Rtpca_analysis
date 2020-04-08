@@ -30,7 +30,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 # Introduction
-Thermal proteome profiling (TPP) [@Savitski2014; @Mateus2020] is a mass spectrometry-based, proteome-wide implemention of the cellular thermal shift assay [@Molina2013]. It was originally developed to study drug-(off-)target engagement. However, it was realized that profiles of interacting protein pairs appeared more similar than by chance [@Tan2018, @Becher2018] which was coined as 'thermal proximity co-aggregation' (TPCA) [@Tan2018]. The R package `Rtpca` enables analysis of TPP datasets using the TPCA concept for studying protein-protein interactions and protein complexes and also allows to test for differential protein-protein interactions across different conditions.      
+Thermal proteome profiling (TPP) [@Savitski2014; @Mateus2020] is a mass spectrometry-based, proteome-wide implemention of the cellular thermal shift assay [@Molina2013]. It was originally developed to study drug-(off-)target engagement. However, it was realized that profiles of interacting protein pairs appeared more similar than by chance [@Tan2018, @Becher2018] which was coined as 'thermal proximity co-aggregation' (TPCA) [@Tan2018]. The R package `Rtpca` enables analysis of TPP datasets using the TPCA concept for studying protein-protein interactions and protein complexes and also allows to test for differential protein-protein interactions (PPIs) across different conditions.      
 Here, we exemplify the analysis based on a dataset by @Becher2018 which provides temperature range TPP (TPP-TR) experiments for synchronized HeLa cells in G1/S cell cycle stage versus M phase.             
 __Note:__ The paper by @Becher2018 also includes 2D-TPP [@Becher2016] data which is in general more sensitive to changes in protein abundance or stability. This data can also be informative on dynamics of protein-protein interactions based on correlations analysis of 2D-TPP profiles of annotated interactors. However, the advantage of TPP-TR data is that one can test for coaggregation which, if significant, is directly indicative of protein-protein interaction or complex assembly.
 
@@ -67,7 +67,7 @@ temperature_anno <-
             supp_tab_becher_s4 %>% 
                 dplyr::select(matches("mean\\.fc"))))))
 ```
-We then extract the data for the 
+We then extract the data for G1/S:
 
 ```{r}
 g1s_df <- supp_tab_becher_s4 %>% 
@@ -90,7 +90,7 @@ rownames(g1s_mat) <- g1s_df$gene_name
 attributes(g1s_mat)$temperature <- temperature_anno
 ```
 
-
+And for M phase:
 ```{r}
 m_df <- supp_tab_becher_s4 %>% 
     filter(cell.cycle == "M") %>% 
@@ -113,13 +113,14 @@ attributes(m_mat)$temperature <- temperature_anno
 ```
 
 
-First, we load an annotation of mammalian complexes by @Ori2016, which comes with the `Rtpca` package:
+We then load an annotation of mammalian complexes by @Ori2016, which comes with the `Rtpca` package:
 ```{r}
 data("ori_et_al_complexes_df")
 ```
 
+## Complex-centric analysis
 
-Then, we perform a TPCA anylsis only in the G1/S condition:
+Now, we perform a TPCA anaylsis based on complexes only in the G1/S condition:
 
 ```{r}
 G1S_TPCA <- runTPCA(
@@ -134,7 +135,7 @@ plotComplexRoc(G1S_TPCA, computeAUC = TRUE)
 
 And we can inspect significantly co-melting protein complexes, like this:
 ```{r}
-G1S_TPCA@tpcaResultTable %>% filter(p_adj < 0.1)
+G1S_TPCA@tpcaResultTable %>% filter(p_adj < 0.1) 
 ```
 
 
@@ -156,7 +157,7 @@ plotComplexRoc(M_TPCA, computeAUC = TRUE)
 ```
 
 ```{r}
-M_TPCA@tpcaResultTable %>% filter(p_adj < 0.1)
+M_TPCA@tpcaResultTable %>% filter(p_adj < 0.1) 
 ```
 
 Based on the protein complexes which we find significantly assembled in either condition, we will select the protein-protein interactions to test for in a differential TPCA:
@@ -178,7 +179,7 @@ filtered_complex_ppis <- ori_et_al_complex_ppis %>%
     filter(complex_name %in% all_significant_complex_comelting) 
 ```
 
-We now run the differential TPCA by evoking""
+We now run the differential TPCA by evoking:
 ```{r}
 set.seed(123)
 M_vs_G1S_diff_TPCA <- runDiffTPCA(
@@ -199,6 +200,12 @@ plotDiffTpcaVolcano(M_vs_G1S_diff_TPCA,
                     xlimit = c(-0.75, 0.75))
 ```
 
+As a result, we obtain an `tpcaResult` object which looks like this:
+```{r}
+M_vs_G1S_diff_TPCA
+```
+
+
 We can now inspect the significant results:
 ```{r}
 M_vs_G1S_diff_TPCA@diffTpcaResultTable %>% 
@@ -213,6 +220,109 @@ plotPPiProfiles(M_vs_G1S_diff_TPCA, pair = c("NUP205", "RANBP2"))
 
 ```{r}
 plotPPiProfiles(M_vs_G1S_diff_TPCA, pair = c("RPS6", "RPSA"))
+```
+
+## PPI-centric analysis
+
+First, we load annotated PPIs by StringDb [@Szklarczyk2019]:
+```{r}
+data("string_ppi_df")
+
+string_ppi_975_df <- string_ppi_df %>% 
+    filter(combined_score >= 975)
+```
+
+The we start our analysis based on PPIs:
+
+```{r}
+G1S_PPI_TPCA <- runTPCA(
+    objList = list(g1s_mat),
+    ppiAnno = string_ppi_975_df,
+    nSamp = 10^6)
+```
+
+As for the complex-centric analysis we get back a `tpcaResult` object:
+```{r}
+G1S_PPI_TPCA
+```
+
+And we can also inpect a ROC curve for this analysis:
+```{r}
+plotPPiRoc(G1S_PPI_TPCA, computeAUC = TRUE)
+```
+
+To inspect which PPIs coaggregated significantly, we can evoke:
+
+```{r}
+G1S_PPI_TPCA@tpcaResultTable %>% filter(p_adj < 0.1) %>% arrange(p_value)
+```
+
+And we can run the same analysis for the M-phase dataset:
+
+```{r}
+M_PPI_TPCA <- runTPCA(
+    objList = list(m_mat),
+    ppiAnno = string_ppi_975_df,
+    nSamp = 10^6)
+```
+
+```{r cache=TRUE}
+plotPPiRoc(M_PPI_TPCA, computeAUC = TRUE)
+```
+
+```{r}
+M_PPI_TPCA@tpcaResultTable %>% filter(p_adj < 0.1) %>% arrange(p_value)
+```
+
+
+By now combining the significantly found coaggregating PPIs (we are a bit less stringent on the adjusted p-value filter here to not reduce the space of possible differential PPIs too strongly), we can define a list of PPIs which we can use to test for differential PPIs across the two cell cycle phases:
+```{r}
+ppis_to_test_diff <- unique(
+    c(filter(G1S_PPI_TPCA@tpcaResultTable, p_adj < 0.2)$complex_name,
+      filter(M_PPI_TPCA@tpcaResultTable, p_adj < 0.2)$complex_name)
+)
+
+filtered_string_ppis <- string_ppi_975_df %>% 
+    filter(pair %in% ppis_to_test_diff)
+```
+
+Based on these PPIs we can now again run a differential TPCA:
+```{r}
+M_vs_G1S_PPI_diff_TPCA <- runDiffTPCA(
+    objList = list(g1s_mat),
+    contrastList = list(m_mat),
+    ctrlCondName = "G1/S",
+    contrastCondName = "M",
+    ppiAnno = filtered_string_ppis, 
+    n = 10^6
+)
+```
+
+```{r}
+plotDiffTpcaVolcano(M_vs_G1S_PPI_diff_TPCA, 
+                    setXLim = TRUE,
+                    xlimit = c(-0.75, 0.75))
+```
+
+Again, we can now inspect the significant results:
+```{r}
+M_vs_G1S_PPI_diff_TPCA@diffTpcaResultTable %>% 
+    dplyr::select(pair, rssC1_rssC2, p_value, p_adj) %>% 
+    arrange(p_value)
+```
+
+And again we plot some of the significantly differentially coaggregating protein pairs:
+
+```{r}
+plotPPiProfiles(M_vs_G1S_PPI_diff_TPCA, c("CDC5L", "EXOC7"))
+```
+
+```{r}
+plotPPiProfiles(M_vs_G1S_PPI_diff_TPCA, c("EIF3D", "EIF3E"))
+```
+
+```{r}
+plotPPiProfiles(M_vs_G1S_PPI_diff_TPCA, c("CCNT1", "CDK9"))
 ```
 
 
