@@ -112,22 +112,27 @@ rownames(m_mat) <- m_df$gene_name
 attributes(m_mat)$temperature <- temperature_anno
 ```
 
+## Multiple testing burden in testing for differential PPIs
+In principle we could now go ahead and test all PPIs we can possibly think of for differential coaggregation in the datasets acquired in the two different cell cycle phases, however in practise this is not feasible. The reason behind this is that the larger the annotation of PPIs is, the higher will be our multiple testing burden and the less likely we are to identify true positive PPI changes.     
+Thus, below we suggest two possible strategies that lead to a significant reduction in tests in comparison to e.g. testing all StringDb [@Szklarczyk2019] annotated PPIs above a certain threshold (even though using a very high threshold (990 or even higher) might also be a viable strategy).      
+The first approach ('complex-centric approach') first tests for coaggregation of protein complexes separately in the different conditions. All PPIs in significantly coaggregating complexes in any of the conditions are then used in a secound step to test for differential coaggregation across the conditions.      
+The secound approach ('PPI-centric approach') uses a similar strategy, but tests for significant PPI coaggregation separately in the different conditions and then chooses significant interactions across both conditions for further testing for differential behavior.
 
-We then load an annotation of mammalian complexes by @Ori2016, which comes with the `Rtpca` package:
+## Complex-centric analysis
+
+We start by loading an annotation of mammalian complexes by @Ori2016, which comes with the `Rtpca` package:
 ```{r}
 data("ori_et_al_complexes_df")
 ```
 
-## Complex-centric analysis
-
-Now, we perform a TPCA anaylsis based on complexes only in the G1/S condition:
+Then, we perform a TPCA anaylsis based on complexes only in the G1/S condition:
 
 ```{r}
 G1S_TPCA <- runTPCA(
     objList = list(g1s_mat),
     complexAnno = ori_et_al_complexes_df)
 ```
-We can plot the ROC curve for how predictive our data is on recovering protein complexes by evoking:
+We can plot a ROC curve to see how predictive our data is on recovering protein complexes by evoking:
 
 ```{r}
 plotComplexRoc(G1S_TPCA, computeAUC = TRUE)
@@ -151,7 +156,7 @@ M_TPCA <- runTPCA(
     objList = list(m_mat),
     complexAnno = ori_et_al_complexes_df)
 ```
-We can see that the predictive performance of this dataset for protein complexes is not quite as good as for the G1/S one: 
+We can see that the predictive performance of this dataset for protein complexes is not quite as good as for the G1/S one, but still pretty decent: 
 ```{r}
 plotComplexRoc(M_TPCA, computeAUC = TRUE)
 ```
@@ -192,6 +197,12 @@ M_vs_G1S_diff_TPCA <- runDiffTPCA(
 )
 ```
 
+This analysis gives us a `tpcaResult` object:
+```{r}
+M_vs_G1S_diff_TPCA
+```
+
+
 We can now plot the result in form of a volcano plot:
 
 ```{r}
@@ -224,7 +235,7 @@ plotPPiProfiles(M_vs_G1S_diff_TPCA, pair = c("RPS6", "RPSA"))
 
 ## PPI-centric analysis
 
-First, we load annotated PPIs by StringDb [@Szklarczyk2019]:
+For the PPI-centric analysis, we first load PPIs annotated by StringDb [@Szklarczyk2019]:
 ```{r}
 data("string_ppi_df")
 
