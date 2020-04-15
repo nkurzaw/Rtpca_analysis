@@ -45,7 +45,7 @@ library(Rtpca) # require(devtools); devtools::install_github("nkurzaw/Rtpca")
 library(ggplot2) # install.packages("ggplot2")
 ```
 
-Then, we download the supplementary data from Tan et al. which contains the TPP data which we'll be using:
+Then, we download the supplementary data from @Becher2018 which contains the TPP data which we'll be using:
 
 ```{r}
 if(!file.exists("1-s2.0-S0092867418303854-mmc4.xlsx")){
