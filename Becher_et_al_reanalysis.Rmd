@@ -243,7 +243,7 @@ string_ppi_975_df <- string_ppi_df %>%
     filter(combined_score >= 975)
 ```
 
-The we start our analysis based on PPIs:
+Then we start our analysis based on PPIs:
 
 ```{r}
 G1S_PPI_TPCA <- runTPCA(
@@ -257,7 +257,7 @@ As for the complex-centric analysis we get back a `tpcaResult` object:
 G1S_PPI_TPCA
 ```
 
-And we can also inpect a ROC curve for this analysis:
+And we can also inspect a ROC curve for this analysis:
 ```{r}
 plotPPiRoc(G1S_PPI_TPCA, computeAUC = TRUE)
 ```
@@ -336,6 +336,9 @@ plotPPiProfiles(M_vs_G1S_PPI_diff_TPCA, c("EIF3D", "EIF3E"))
 plotPPiProfiles(M_vs_G1S_PPI_diff_TPCA, c("CCNT1", "CDK9"))
 ```
 
+# Conclusion
+`Rtpca` offers user-friendly exploration of TPP datasets for PPIs and allows to assess significantly changing PPIs across different conditions. We exemplify here, how this can be done using the TPP dataset of different phases of the human cell cycle [@Becher2018] from which we recover several differentially coaggregating protein pairs which are known to change during these phases.      
+A challenge in the analysis remains the high numbers of hypothesis tests that have to be performed which require multiple testing adjustment and are limited in sensitivity. In the future methods such as *independent hypothesis weighting* (`IHW`) [@Ignatiadis2016], exploitung covariates such as unique peptides used for quantification, could be used to combat this problem and further improve sensitivity of the approach.
 
 ```{r}
 sessionInfo()
