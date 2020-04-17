@@ -113,7 +113,7 @@ attributes(m_mat)$temperature <- temperature_anno
 ```
 
 ## Multiple testing burden in testing for differential PPIs
-In principle we could now go ahead and test all PPIs we can possibly think of for differential coaggregation in the datasets acquired in the two different cell cycle phases, however in practise this is not feasible. The reason behind this is that the larger the annotation of PPIs is, the higher will be our multiple testing burden and the less likely we are to identify true positive PPI changes.     
+In principle, we could now go ahead and test all possible PPIs for differential coaggregation in the datasets acquired in the two different cell cycle phases, however in practise this is not feasible. The reason behind this is that the larger the annotation of PPIs is, the higher will be our multiple testing burden and the less likely we are to identify true positive PPI changes.     
 Thus, below we suggest two possible strategies that lead to a significant reduction in tests in comparison to e.g. testing all StringDb [@Szklarczyk2019] annotated PPIs above a certain threshold (even though using a very high threshold (990 or even higher) might also be a viable strategy).      
 The first approach ('complex-centric approach') first tests for coaggregation of protein complexes separately in the different conditions. All PPIs in significantly coaggregating complexes in any of the conditions are then used in a secound step to test for differential coaggregation across the conditions.      
 The secound approach ('PPI-centric approach') uses a similar strategy, but tests for significant PPI coaggregation separately in the different conditions and then chooses significant interactions across both conditions for further testing for differential behavior.
@@ -338,7 +338,7 @@ plotPPiProfiles(M_vs_G1S_PPI_diff_TPCA, c("CCNT1", "CDK9"))
 
 # Conclusion
 `Rtpca` offers user-friendly exploration of TPP datasets for PPIs and allows to assess significantly changing PPIs across different conditions. We exemplify here, how this can be done using the TPP dataset of different phases of the human cell cycle [@Becher2018] from which we recover several differentially coaggregating protein pairs which are known to change during these phases.      
-A challenge in the analysis remains the high numbers of hypothesis tests that have to be performed which require multiple testing adjustment and are limited in sensitivity. In the future methods such as *independent hypothesis weighting* (`IHW`) [@Ignatiadis2016], exploitung covariates such as unique peptides used for quantification, could be used to combat this problem and further improve sensitivity of the approach.
+A challenge in the analysis remains the high numbers of hypothesis tests that have to be performed which require multiple testing adjustment and are limited in sensitivity. In the future, methods such as *independent hypothesis weighting* (`IHW`) [@Ignatiadis2016], exploiting covariates such as number of unique peptides used for quantification, could be used to circumvent this problem and further improve sensitivity of the approach.
 
 ```{r}
 sessionInfo()
