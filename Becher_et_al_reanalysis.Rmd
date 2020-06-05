@@ -51,7 +51,8 @@ Then, we download the supplementary data from @Becher2018 which contains the TPP
 if(!file.exists("1-s2.0-S0092867418303854-mmc4.xlsx")){
     download.file(
         url = "https://ars.els-cdn.com/content/image/1-s2.0-S0092867418303854-mmc4.xlsx",
-        destfile = "1-s2.0-S0092867418303854-mmc4.xlsx")
+        destfile = "1-s2.0-S0092867418303854-mmc4.xlsx",
+        mode = "wb")
 }
 
 ```
