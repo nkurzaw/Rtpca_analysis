@@ -27,6 +27,7 @@ header-includes:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+reRunTpca <- FALSE
 ```
 
 # Introduction
@@ -41,8 +42,9 @@ First, we need to load the required libraries (these need to be installed as spe
 ```{r, message=FALSE, warning=FALSE}
 library(dplyr) # install.packages("dplyr")
 library(readxl) # install.packages("readxl")
-library(Rtpca) # require(devtools); devtools::install_github("nkurzaw/Rtpca")
+library(Rtpca) # BiocManager::install("nkurzaw/Rtpca") 
 library(ggplot2) # install.packages("ggplot2")
+library(eulerr) # install.packages("eulerr")
 ```
 
 Then, we download the supplementary data from @Becher2018 which contains the TPP data which we'll be using:
@@ -56,7 +58,16 @@ if(!file.exists("1-s2.0-S0092867418303854-mmc4.xlsx")){
 }
 
 ```
-Next, we read in the annotation information of the supplementary table as a data frame
+
+## Getting TPP data into a valid import format
+The ideal input format for using the `Rtpca` package is a list of `ExpressionSets` as obtained by
+importing the data with the `TPP` package [@Franken2016]. We showcase how this can be done in the `Rtpca` package
+vignette.         
+However, in order to facilitate usage of the `Rtpca` functions if the raw data of a TPP experiment 
+are not available, such as for the case we are exemplifying here, another supported input format of
+the data is a simple list of matrices. In the case replicates are available these can be simply incorporated as different list elements. Here we work with the median fold changes for each condition, thus are list objects will only contain one element each. The rows of the matrices should contain the different measured proteins and the columns the relative soluble fraction at different temperatures measured by TMT reporter ions. Since the column names will often represent the measured TMT channels, the `Rtpca` package additionally expects an `attribute` names `temperature` (shown below how to define).        
+
+We show here, how such a format can be created based on the example using the supplementary table supplied by @Becher2018:
 
 ```{r}
 supp_tab_becher_s4 <- read_xlsx("1-s2.0-S0092867418303854-mmc4.xlsx",
@@ -83,6 +94,8 @@ g1s_df <- supp_tab_becher_s4 %>%
            replicates == 3)
 ```
 
+And we create as matrix, define its row names and supply and attribute vector specifying the temperatures represented by the various TMT channels:
+
 ```{r}
 g1s_mat <- as.matrix(
     g1s_df %>% dplyr::select(dplyr::matches("mean\\.fc"))
@@ -91,7 +104,18 @@ rownames(g1s_mat) <- g1s_df$gene_name
 attributes(g1s_mat)$temperature <- temperature_anno
 ```
 
-And for M phase:
+This is what the matrix looks like now:
+```{r}
+head(g1s_mat)
+```
+
+and it's attirbutes
+```{r}
+summary(attributes(g1s_mat))
+```
+
+
+Now, we do the same for M phase dataset:
 ```{r}
 m_df <- supp_tab_becher_s4 %>% 
     filter(cell.cycle == "M") %>% 
@@ -124,9 +148,12 @@ The secound approach ('PPI-centric approach') uses a similar strategy, but tests
 We start by loading an annotation of mammalian complexes by @Ori2016, which comes with the `Rtpca` package:
 ```{r}
 data("ori_et_al_complexes_df")
+ori_et_al_complexes_df
 ```
 
-Then, we perform a TPCA anaylsis based on complexes only in the G1/S condition:
+The crucial columns it contains are the following `protein`: a column using the same identifiers (Gene names (in this case), Uniprot ids or Ensembl protein ids) as the rownames of the supplied input matrix of ExpressionSet object and `id`: protein complex ids.            \\
+
+Then, we perform a TPCA analysis based on complexes only in the G1/S condition:
 
 ```{r}
 G1S_TPCA <- runTPCA(
@@ -141,13 +168,13 @@ plotComplexRoc(G1S_TPCA, computeAUC = TRUE)
 
 And we can inspect significantly co-melting protein complexes, like this:
 ```{r}
-G1S_TPCA@tpcaResultTable %>% filter(p_adj < 0.1) 
+tpcaResultTable(G1S_TPCA) %>% filter(p_adj < 0.1) 
 ```
 
 
 ```{r}
 g1s_significant_complex_comelting <- 
-    filter(G1S_TPCA@tpcaResultTable,p_adj < 0.1)$complex_name
+    filter(tpcaResultTable(G1S_TPCA), p_adj < 0.1)$complex_name
 ```
 
 Next, we perform the same analysis for only the M phase condition:
@@ -163,13 +190,13 @@ plotComplexRoc(M_TPCA, computeAUC = TRUE)
 ```
 
 ```{r}
-M_TPCA@tpcaResultTable %>% filter(p_adj < 0.1) 
+tpcaResultTable(M_TPCA) %>% filter(p_adj < 0.1) 
 ```
 
 Based on the protein complexes which we find significantly assembled in either condition, we will select the protein-protein interactions to test for in a differential TPCA:
 ```{r}
 m_significant_complex_comelting <- 
-    filter(M_TPCA@tpcaResultTable,p_adj < 0.1)$complex_name
+    filter(tpcaResultTable(M_TPCA), p_adj < 0.1)$complex_name
 
 all_significant_complex_comelting <- 
     unique(c(g1s_significant_complex_comelting, 
@@ -186,7 +213,7 @@ filtered_complex_ppis <- ori_et_al_complex_ppis %>%
 ```
 
 We now run the differential TPCA by evoking:
-```{r}
+```{r eval=reRunTpca}
 set.seed(123)
 M_vs_G1S_diff_TPCA <- runDiffTPCA(
     objList = list(g1s_mat),
@@ -197,6 +224,10 @@ M_vs_G1S_diff_TPCA <- runDiffTPCA(
     n = 10^6
 )
 ```
+```{r eval=!reRunTpca, echo=FALSE}
+M_vs_G1S_diff_TPCA <- readRDS("prerun/M_vs_G1S_diff_TPCA.rds")
+```
+
 
 This analysis gives us a `tpcaResult` object:
 ```{r}
@@ -212,15 +243,9 @@ plotDiffTpcaVolcano(M_vs_G1S_diff_TPCA,
                     xlimit = c(-0.75, 0.75))
 ```
 
-As a result, we obtain an `tpcaResult` object which looks like this:
-```{r}
-M_vs_G1S_diff_TPCA
-```
-
-
 We can now inspect the significant results:
 ```{r}
-M_vs_G1S_diff_TPCA@diffTpcaResultTable %>% 
+diffTpcaResultTable(M_vs_G1S_diff_TPCA) %>% 
     dplyr::select(pair, rssC1_rssC2, p_value, p_adj) %>% 
     arrange(p_value)
 ```
@@ -239,19 +264,30 @@ plotPPiProfiles(M_vs_G1S_diff_TPCA, pair = c("RPS6", "RPSA"))
 For the PPI-centric analysis, we first load PPIs annotated by StringDb [@Szklarczyk2019]:
 ```{r}
 data("string_ppi_df")
+string_ppi_df
+```
+This table has been created from the human *protein.links* table downloaded from the StringDB website. It can serve as a template for users to create equivalent tables for other organisms.       
+Its essential columns are `x`: 1st interactor, `y`: 2nd interactor and `pair`: unique id of both interactors in alphabetical order (interactions should be unique).
 
+And we filter this table to only contain high confidence PPIs
+```{r}
 string_ppi_975_df <- string_ppi_df %>% 
     filter(combined_score >= 975)
 ```
 
+
 Then we start our analysis based on PPIs:
 
-```{r}
+```{r, eval=reRunTpca}
 G1S_PPI_TPCA <- runTPCA(
     objList = list(g1s_mat),
     ppiAnno = string_ppi_975_df,
     nSamp = 10^6)
 ```
+```{r,  eval=!reRunTpca, echo=FALSE}
+G1S_PPI_TPCA <- readRDS("prerun/G1S_PPI_TPCA.rds")
+```
+
 
 As for the complex-centric analysis we get back a `tpcaResult` object:
 ```{r}
@@ -266,16 +302,19 @@ plotPPiRoc(G1S_PPI_TPCA, computeAUC = TRUE)
 To inspect which PPIs coaggregated significantly, we can evoke:
 
 ```{r}
-G1S_PPI_TPCA@tpcaResultTable %>% filter(p_adj < 0.1) %>% arrange(p_value)
+tpcaResultTable(G1S_PPI_TPCA) %>% filter(p_adj < 0.1) %>% arrange(p_value)
 ```
 
 And we can run the same analysis for the M-phase dataset:
 
-```{r}
+```{r, eval=reRunTpca}
 M_PPI_TPCA <- runTPCA(
     objList = list(m_mat),
     ppiAnno = string_ppi_975_df,
     nSamp = 10^6)
+```
+```{r, eval=!reRunTpca, echo=FALSE}
+M_PPI_TPCA <- readRDS("prerun/M_PPI_TPCA.rds")
 ```
 
 ```{r cache=TRUE}
@@ -283,7 +322,7 @@ plotPPiRoc(M_PPI_TPCA, computeAUC = TRUE)
 ```
 
 ```{r}
-M_PPI_TPCA@tpcaResultTable %>% filter(p_adj < 0.1) %>% arrange(p_value)
+tpcaResultTable(M_PPI_TPCA) %>% filter(p_adj < 0.1) %>% arrange(p_value)
 ```
 
 
@@ -299,7 +338,7 @@ filtered_string_ppis <- string_ppi_975_df %>%
 ```
 
 Based on these PPIs we can now again run a differential TPCA:
-```{r}
+```{r, eval=reRunTpca}
 M_vs_G1S_PPI_diff_TPCA <- runDiffTPCA(
     objList = list(g1s_mat),
     contrastList = list(m_mat),
@@ -309,6 +348,11 @@ M_vs_G1S_PPI_diff_TPCA <- runDiffTPCA(
     n = 10^6
 )
 ```
+```{r, eval=!reRunTpca}
+M_vs_G1S_PPI_diff_TPCA <- readRDS("prerun/M_vs_G1S_PPI_diff_TPCA.rds")
+```
+
+
 
 ```{r}
 plotDiffTpcaVolcano(M_vs_G1S_PPI_diff_TPCA, 
@@ -318,7 +362,7 @@ plotDiffTpcaVolcano(M_vs_G1S_PPI_diff_TPCA,
 
 Again, we can now inspect the significant results:
 ```{r}
-M_vs_G1S_PPI_diff_TPCA@diffTpcaResultTable %>% 
+diffTpcaResultTable(M_vs_G1S_PPI_diff_TPCA) %>% 
     dplyr::select(pair, rssC1_rssC2, p_value, p_adj) %>% 
     arrange(p_value)
 ```
@@ -336,6 +380,32 @@ plotPPiProfiles(M_vs_G1S_PPI_diff_TPCA, c("EIF3D", "EIF3E"))
 ```{r}
 plotPPiProfiles(M_vs_G1S_PPI_diff_TPCA, c("CCNT1", "CDK9"))
 ```
+# Comparison of the results obtained by both strategies
+
+In order to asses how many differential PPIs can be recovered with either of the approaches, we plot a Venn diagramm below: 
+
+```{r}
+complex_centric_hits <- diffTpcaResultTable(M_vs_G1S_diff_TPCA) %>% 
+    dplyr::select(pair, rssC1_rssC2, p_value, p_adj) %>% 
+    arrange(p_value) %>% 
+    filter(p_adj < 0.1)
+
+ppi_centric_hits <- diffTpcaResultTable(M_vs_G1S_PPI_diff_TPCA) %>% 
+    dplyr::select(pair, rssC1_rssC2, p_value, p_adj) %>% 
+    arrange(p_value) %>% 
+    filter(p_adj < 0.1)
+
+all_hits <- union(complex_centric_hits$pair, 
+                  ppi_centric_hits$pair)
+
+venn_df <- data.frame(
+  complex_centric = all_hits %in% complex_centric_hits$pair,
+  ppi_centric = all_hits %in% ppi_centric_hits$pair
+)
+
+plot(venn(venn_df))
+```
+It appears that both approaches pick up a large set of distinct differential PPIs. The PPI-centric approach appears to recover more significant PPI changes, however the complex-centric one reveals more intra-complex centered interactions changes.
 
 # Conclusion
 `Rtpca` offers user-friendly exploration of TPP datasets for PPIs and allows to assess significantly changing PPIs across different conditions. We exemplify here, how this can be done using the TPP dataset of different phases of the human cell cycle [@Becher2018] from which we recover several differentially coaggregating protein pairs which are known to change during these phases.      
