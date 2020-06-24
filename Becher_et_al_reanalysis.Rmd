@@ -27,7 +27,7 @@ header-includes:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-reRunTpca <- FALSE
+reRunTpca <- TRUE
 ```
 
 # Introduction
@@ -61,11 +61,11 @@ if(!file.exists("1-s2.0-S0092867418303854-mmc4.xlsx")){
 
 ## Getting TPP data into a valid import format
 The ideal input format for using the `Rtpca` package is a list of `ExpressionSets` as obtained by
-importing the data with the `TPP` package [@Franken2016]. We showcase how this can be done in the `Rtpca` package
+importing the data with the `TPP` package [@franken_2015]. We showcase how this can be done in the `Rtpca` package
 vignette.         
 However, in order to facilitate usage of the `Rtpca` functions if the raw data of a TPP experiment 
 are not available, such as for the case we are exemplifying here, another supported input format of
-the data is a simple list of matrices. In the case replicates are available these can be simply incorporated as different list elements. Here we work with the median fold changes for each condition, thus are list objects will only contain one element each. The rows of the matrices should contain the different measured proteins and the columns the relative soluble fraction at different temperatures measured by TMT reporter ions. Since the column names will often represent the measured TMT channels, the `Rtpca` package additionally expects an `attribute` names `temperature` (shown below how to define).        
+the data is a simple list of matrices. In the case replicates are available these can be simply incorporated as different list elements. Here we work with the median fold changes for each condition, thus our list objects will only contain one element each. The rows of the matrices should contain the different measured proteins and the columns the relative soluble fraction at different temperatures measured by TMT reporter ions. Since the column names will often represent the measured TMT channels, the `Rtpca` package additionally expects an `attribute` named `temperature` (shown below how to define, not needed if the input is an object imported with the `TPP` package).        
 
 We show here, how such a format can be created based on the example using the supplementary table supplied by @Becher2018:
 
@@ -78,6 +78,7 @@ temperature_anno <-
         gsub("T", "", gsub("_.+", "", colnames(
             supp_tab_becher_s4 %>% 
                 dplyr::select(matches("mean\\.fc"))))))
+temperature_anno
 ```
 We then extract the data for G1/S:
 
@@ -151,7 +152,7 @@ data("ori_et_al_complexes_df")
 ori_et_al_complexes_df
 ```
 
-The crucial columns it contains are the following `protein`: a column using the same identifiers (Gene names (in this case), Uniprot ids or Ensembl protein ids) as the rownames of the supplied input matrix of ExpressionSet object and `id`: protein complex ids.            \\
+The crucial columns it contains are the following `protein`: a column using the same identifiers (Gene names (in this case), Uniprot ids or Ensembl protein ids) as the row names of the supplied input matrix or ExpressionSet object and `id`: unique protein complex ids.            
 
 Then, we perform a TPCA analysis based on complexes only in the G1/S condition:
 
@@ -160,7 +161,7 @@ G1S_TPCA <- runTPCA(
     objList = list(g1s_mat),
     complexAnno = ori_et_al_complexes_df)
 ```
-We can plot a ROC curve to see how predictive our data is on recovering protein complexes by evoking:
+We can plot a ROC curve to see how predictive our data is for recovering annotated protein complexes by evoking:
 
 ```{r}
 plotComplexRoc(G1S_TPCA, computeAUC = TRUE)
@@ -266,8 +267,8 @@ For the PPI-centric analysis, we first load PPIs annotated by StringDb [@Szklarc
 data("string_ppi_df")
 string_ppi_df
 ```
-This table has been created from the human *protein.links* table downloaded from the StringDB website. It can serve as a template for users to create equivalent tables for other organisms.       
-Its essential columns are `x`: 1st interactor, `y`: 2nd interactor and `pair`: unique id of both interactors in alphabetical order (interactions should be unique).
+This table has been created from the human *protein.links* table downloaded from the StringDb website. It can serve as a template for users to create equivalent tables for other organisms.       
+Its essential columns are `x`: 1st interactor, `y`: 2nd interactor and `pair`: unique id of both interactors in alphabetical order.
 
 And we filter this table to only contain high confidence PPIs
 ```{r}
@@ -382,7 +383,7 @@ plotPPiProfiles(M_vs_G1S_PPI_diff_TPCA, c("CCNT1", "CDK9"))
 ```
 # Comparison of the results obtained by both strategies
 
-In order to asses how many differential PPIs can be recovered with either of the approaches, we plot a Venn diagramm below: 
+In order to asses how many differential PPIs can be recovered with either of the approaches, we plot a Venn diagram below: 
 
 ```{r}
 complex_centric_hits <- diffTpcaResultTable(M_vs_G1S_diff_TPCA) %>% 
@@ -405,7 +406,7 @@ venn_df <- data.frame(
 
 plot(venn(venn_df))
 ```
-It appears that both approaches pick up a large set of distinct differential PPIs. The PPI-centric approach appears to recover more significant PPI changes, however the complex-centric one reveals more intra-complex centered interactions changes.
+It appears that both approaches pick up a set of distinct differential PPIs. The PPI-centric approach appears to recover more significant PPI changes, however the complex-centric one reveals more intra-complex centered interactions changes.
 
 # Conclusion
 `Rtpca` offers user-friendly exploration of TPP datasets for PPIs and allows to assess significantly changing PPIs across different conditions. We exemplify here, how this can be done using the TPP dataset of different phases of the human cell cycle [@Becher2018] from which we recover several differentially coaggregating protein pairs which are known to change during these phases.      
