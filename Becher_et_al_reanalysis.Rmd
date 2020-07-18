@@ -28,6 +28,7 @@ header-includes:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 reRunTpca <- TRUE
+set.seed(123)
 ```
 
 # Introduction
@@ -116,7 +117,7 @@ summary(attributes(g1s_mat))
 ```
 
 
-Now, we do the same for M phase dataset:
+Now, we do the same for the M phase dataset:
 ```{r}
 m_df <- supp_tab_becher_s4 %>% 
     filter(cell.cycle == "M") %>% 
@@ -167,7 +168,9 @@ We can plot a ROC curve to see how predictive our data is for recovering annotat
 plotComplexRoc(G1S_TPCA, computeAUC = TRUE)
 ```
 
-And we can inspect significantly co-melting protein complexes, like this:
+Since it would not be feasible to compare all annotated protein complexes (true positives) with all non-complex annotated groups of proteins (false positives), the function uses several random permutations of the input complex annotation table as a proxy of false positives found by ranking groups of proteins by low average Euclidean melting curve distances. __Note:__ This procedure will be slightly different each time it is run, since the permutations of the complex annotation table will be different each time. Thus, it is recommended to set a random number generator seed to get reproducible results.           
+
+We can now inspect significantly co-melting protein complexes, like this:
 ```{r}
 tpcaResultTable(G1S_TPCA) %>% filter(p_adj < 0.1) 
 ```
@@ -215,7 +218,6 @@ filtered_complex_ppis <- ori_et_al_complex_ppis %>%
 
 We now run the differential TPCA by evoking:
 ```{r eval=reRunTpca}
-set.seed(123)
 M_vs_G1S_diff_TPCA <- runDiffTPCA(
     objList = list(g1s_mat),
     contrastList = list(m_mat),
@@ -321,6 +323,8 @@ M_PPI_TPCA <- readRDS("prerun/M_PPI_TPCA.rds")
 ```{r cache=TRUE}
 plotPPiRoc(M_PPI_TPCA, computeAUC = TRUE)
 ```
+
+__Note:__ The AUC for recovering PPIs using the TPCA approach is usually lower than for recovering protein complexes. This is due to the fact that it is less likely to find three or more proteins showing similar melting curves by chance (protein complex analysis), than it is for two proteins (PPI-based analysis).
 
 ```{r}
 tpcaResultTable(M_PPI_TPCA) %>% filter(p_adj < 0.1) %>% arrange(p_value)
